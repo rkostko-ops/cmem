@@ -1,0 +1,17 @@
+{
+  "name": "cmem",
+  "version": "0.4.0",
+  "description": "Self-learning memory for Claude Code. Never lose a conversation.",
+  "author": {
+    "name": "Colby McHenry",
+    "url": "https://github.com/colbymchenry"
+  },
+  "homepage": "https://github.com/colbymchenry/cmem",
+  "repository": "https://github.com/colbymchenry/cmem",
+  "license": "MIT",
+  "keywords": ["memory", "learning", "sessions", "knowledge"],
+  "commands": "../commands/",
+  "skills": "../skills/",
+  "hooks": "../hooks/hooks.json",
+  "mcpServers": "../.mcp.json"
+}
