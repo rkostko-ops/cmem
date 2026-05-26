@@ -581,15 +581,14 @@ function searchLessonsByEmbeddingWithDistance(embedding, projectPath, limit = 5)
   const rows = db2.prepare(`
     SELECT
       l.*,
-      le.distance
+      vec_distance_L2(le.embedding, ?) as distance
     FROM lesson_embeddings le
     JOIN lessons l ON l.id = le.lesson_id
     WHERE l.project_path = ?
       AND l.archived = 0
-      AND le.embedding MATCH ?
-    ORDER BY le.distance ASC
+    ORDER BY distance ASC
     LIMIT ?
-  `).all(projectPath, JSON.stringify(embedding), limit);
+  `).all(JSON.stringify(embedding), projectPath, limit);
   return rows.map((row) => ({
     lesson: mapLessonRow(row),
     distance: row.distance
