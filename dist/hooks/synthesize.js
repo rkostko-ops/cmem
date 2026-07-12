@@ -1035,7 +1035,7 @@ var SynthesisEngine = class {
   /**
    * Synthesize lessons from a session
    */
-  async synthesize(session, messages) {
+  async synthesize(session, messages, projectPathOverride) {
     const result = {
       lessonsCreated: 0,
       lessonsSkipped: 0,
@@ -1064,7 +1064,7 @@ var SynthesisEngine = class {
       if (rawLessons.length === 0) {
         return result;
       }
-      const projectPath = session.projectPath || "";
+      const projectPath = projectPathOverride || session.projectPath || "";
       for (const raw of rawLessons) {
         try {
           const stored = await this.dedupeAndStore(raw, session, projectPath);
@@ -1274,7 +1274,7 @@ async function processSynthesisQueue(limit = 5) {
         result.failed++;
         continue;
       }
-      const synthesisResult = await synthesisEngine.synthesize(session, messages);
+      const synthesisResult = await synthesisEngine.synthesize(session, messages, item.projectPath);
       if (synthesisResult.errors.length > 0) {
         result.errors.push(...synthesisResult.errors);
       }
