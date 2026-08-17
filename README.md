@@ -25,6 +25,23 @@ npx @colbymchenry/cmem
 
 ---
 
+> ### ⚠️ This is a fork
+>
+> This repository is a **fork of upstream `@colbymchenry/cmem` 0.5.4** (MIT, © Colby McHenry), kept as
+> an installable source. It carries fixes upstream does not have: a `vec0` KNN workaround, correct
+> `project_path` attribution for synthesized lessons, and calibrated retrieval thresholds with semantic
+> deduplication. **The `npx` command below is upstream's and does not install this fork.** Install with:
+>
+> ```bash
+> npm i -g https://github.com/rkostko-ops/cmem/releases/download/v0.5.4-fork.3/colbymchenry-cmem-0.5.4-fork.3.tgz
+> ```
+>
+> See **[FORK.md](FORK.md)** for what changed, why, and the measurements behind each threshold.
+> A Polish-language description of the tool's internals is in
+> [opis_dzialania_narzedzia.md](opis_dzialania_narzedzia.md).
+
+---
+
 ## Stop Writing Markdown Files
 
 Everyone tries to solve Claude's memory problem the same way: **manually writing markdown files**. `CLAUDE.md`, `ARCHITECTURE.md`, decision logs, convention docs...

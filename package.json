@@ -68,6 +68,9 @@
     "skills",
     "hooks",
     ".mcp.json",
-    "README.md"
+    "README.md",
+    "FORK.md",
+    "REDISTRIBUTION.md",
+    "opis_dzialania_narzedzia.md"
   ]
 }
