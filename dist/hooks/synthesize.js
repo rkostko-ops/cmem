@@ -1115,6 +1115,10 @@ Extract reusable lessons from this conversation. Focus on:
 - Include context for when the lesson applies
 - Skip trivial or one-off fixes
 - Focus on knowledge that would help future work
+- HARD LIMIT: return AT MOST 3 lessons. Fewer is better than more.
+- Prefer ONE excellent, durable lesson over several mediocre ones. An almost-empty
+  array is the correct answer for a routine session — most sessions teach nothing reusable.
+- Do NOT restate facts that are obvious from the codebase, nor generic engineering advice.
 
 ## Output Format
 Return a JSON array of lessons. Each lesson must have:
@@ -1172,7 +1176,7 @@ ${content}`;
         insight: String(item.insight),
         reasoning: item.reasoning ? String(item.reasoning) : void 0,
         confidence: Math.min(0.7, Math.max(0.3, Number(item.confidence) || 0.5))
-      }));
+      })).slice(0, 3);
     } catch {
       return [];
     }
@@ -1191,11 +1195,25 @@ ${content}`;
    * Check for duplicates and store if unique
    */
   async dedupeAndStore(raw, session, projectPath) {
-    const embeddingText = `${raw.title} ${raw.triggerContext} ${raw.insight}`;
+    // fork.3 (2026-08-17): dwie poprawki dedupu.
+    // (1) SYMETRIA METRYKI: baza trzyma embedding tekstu z etykietami (buildEmbeddingText),
+    //     a tu embedowano surowe "title trigger insight" => dystanse systematycznie zawyzone.
+    //     Po zrownaniu formatow mediana dystansu znanych duplikatow spadla 0.582 -> 0.422.
+    // (2) PROG SEMANTYCZNY zamiast leksykalnego isTooSimilar() (pokrycie slow > 0.85, czyli
+    //     praktycznie identyczny tekst; parafraza, a zwlaszcza PL vs EN, przechodzila zawsze —
+    //     skutek zmierzony na realnej bazie: jeden fakt o zachowaniu pewnego CLI opisany
+    //     przez 17 aktywnych lekcji w 9 sciezkach projektow, w dwoch jezykach).
+    //     Prog 0.48 skalibrowany na tresci 12 par: duplikaty <=0.453, pierwsze nie-duplikaty >=0.528.
+    const embeddingText = [
+      `Title: ${raw.title}`,
+      `Category: ${raw.category}`,
+      `When to apply: ${raw.triggerContext}`,
+      `Insight: ${raw.insight}`
+    ].concat(raw.reasoning ? [`Reasoning: ${raw.reasoning}`] : []).join("\n\n");
     try {
       const embedding = await getEmbedding(embeddingText);
-      const similar = searchLessonsByEmbedding(embedding, projectPath, 1);
-      if (similar.length > 0 && this.isTooSimilar(similar[0], raw)) {
+      const similar = searchLessonsByEmbeddingWithDistance(embedding, projectPath, 1);
+      if (similar.length > 0 && similar[0].distance < 0.48) {
         return null;
       }
       const input = {

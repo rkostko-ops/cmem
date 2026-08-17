@@ -5186,6 +5186,10 @@ Extract reusable lessons from this conversation. Focus on:
 - Include context for when the lesson applies
 - Skip trivial or one-off fixes
 - Focus on knowledge that would help future work
+- HARD LIMIT: return AT MOST 3 lessons. Fewer is better than more.
+- Prefer ONE excellent, durable lesson over several mediocre ones. An almost-empty
+  array is the correct answer for a routine session — most sessions teach nothing reusable.
+- Do NOT restate facts that are obvious from the codebase, nor generic engineering advice.
 
 ## Output Format
 Return a JSON array of lessons. Each lesson must have:

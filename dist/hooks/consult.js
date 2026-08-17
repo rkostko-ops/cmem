@@ -793,7 +793,10 @@ var LESSON_CATEGORY_NAMES = {
 var DEFAULT_MAX_SEMANTIC = 5;
 var DEFAULT_MAX_CORE = 3;
 var MAX_TOTAL_LESSONS = 8;
-var SIMILARITY_THRESHOLD = 1.2;
+// fork.3 (2026-08-17): 1.2 lezalo POWYZEJ maksimum realnych dystansow (zmierzone: max 1.147-1.163
+// w 4 pulach 230-839 lekcji) => filtr nie odrzucal niczego, wstrzykiwane bylo zawsze top-5 kNN.
+// 0.85 ~ p10 realnego rozkladu: wpuszcza gorne ~10% puli, a przy prompcie nie na temat zero lekcji.
+var SIMILARITY_THRESHOLD = 0.85;
 var MIN_CONFIDENCE2 = 0.3;
 var LessonConsultant = class {
   /**
@@ -829,7 +832,10 @@ var LessonConsultant = class {
         maxSemantic * 2
         // Fetch extra since we'll filter
       );
-      semanticLessons = results.filter((r) => r.distance < SIMILARITY_THRESHOLD).filter((r) => r.lesson.confidence >= MIN_CONFIDENCE2).map((r) => r.lesson);
+      // fork.3 (2026-08-17): brakowalo obciecia do maxSemantic. Pobierane jest 2x maxSemantic
+      // ("fetch extra since we'll filter"), ale wynik nigdy nie byl przycinany, wiec przy progu,
+      // ktory nic nie odrzucal, limit dzialal podwojnie (10 semantycznych + 3 core -> MAX_TOTAL 8).
+      semanticLessons = results.filter((r) => r.distance < SIMILARITY_THRESHOLD).filter((r) => r.lesson.confidence >= MIN_CONFIDENCE2).map((r) => r.lesson).slice(0, maxSemantic);
     } catch {
     }
     const coreLessons = getCoreLessons(projectPath, maxCore);
@@ -982,8 +988,11 @@ async function main() {
       input.prompt,
       input.cwd,
       {
-        maxSemantic: 5,
-        maxCore: 3
+        // fork.3 (2026-08-17): 5+3 slotow => 3 z 8 wstrzyknietych bylo NIEZALEZNE od zapytania
+        // (getCoreLessons sortuje po times_validated, ktore jest ~0, wiec de facto po times_applied,
+        // a ten licznik rosnie od samego wstrzykniecia => petla samopotwierdzajaca).
+        maxSemantic: 3,
+        maxCore: 1
       },
       input.session_id
       // Session ID for deduplication - don't re-inject same lessons
