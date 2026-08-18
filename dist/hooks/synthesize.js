@@ -1200,10 +1200,19 @@ ${content}`;
     //     a tu embedowano surowe "title trigger insight" => dystanse systematycznie zawyzone.
     //     Po zrownaniu formatow mediana dystansu znanych duplikatow spadla 0.582 -> 0.422.
     // (2) PROG SEMANTYCZNY zamiast leksykalnego isTooSimilar() (pokrycie slow > 0.85, czyli
-    //     praktycznie identyczny tekst; parafraza, a zwlaszcza PL vs EN, przechodzila zawsze —
-    //     skutek zmierzony na realnej bazie: jeden fakt o zachowaniu pewnego CLI opisany
-    //     przez 17 aktywnych lekcji w 9 sciezkach projektow, w dwoch jezykach).
-    //     Prog 0.48 skalibrowany na tresci 12 par: duplikaty <=0.453, pierwsze nie-duplikaty >=0.528.
+    //     praktycznie identyczny tekst; kazda parafraza przechodzila).
+    // fork.5 (2026-08-18): PROG 0.48 -> 0.35. Kalibracja fork.3 opierala sie na 12 recznie
+    //     obejrzanych parach z waskiego pasma decyzyjnego — zbyt mala i obciazona probka.
+    //     Zmierzone na pelnym rozkladzie (dystans do najblizszej INNEJ lekcji, 3 projekty,
+    //     ~1600 lekcji): przy 0.48 odrzucone zostaloby 65-88% lekcji ODREBNYCH, a od ~0.38
+    //     dopasowania biora sie z FORMY retorycznej, nie z tresci (zmierzony przypadek: dwie
+    //     rozne rady zaczynajace sie tym samym zwrotem, d=0.403). Ponizej 0.35 obejrzane pary
+    //     graniczne to prawdziwe duplikaty. Under-merge jest tu bezpiecznym trybem awarii:
+    //     zdublowana lekcja kosztuje slot, blednie odrzucona kosztuje wiedze bezpowrotnie.
+    // UWAGA: duplikatow MIEDZYJEZYKOWYCH ten mechanizm NIE lapie i zadny prog tego nie zmieni —
+    //     model embeddingow grupuje po jezyku. Zmierzone: parafraza tego samego faktu w drugim
+    //     jezyku lezy od oryginalu na 0.575 i wypada poza 10 najblizszych sasiadow, podczas gdy
+    //     ta sama parafraza w jezyku oryginalu lezy na 0.327 (sasiad #1). Nie dobierac do tego progu.
     const embeddingText = [
       `Title: ${raw.title}`,
       `Category: ${raw.category}`,
@@ -1213,7 +1222,7 @@ ${content}`;
     try {
       const embedding = await getEmbedding(embeddingText);
       const similar = searchLessonsByEmbeddingWithDistance(embedding, projectPath, 1);
-      if (similar.length > 0 && similar[0].distance < 0.48) {
+      if (similar.length > 0 && similar[0].distance < 0.35) {
         return null;
       }
       const input = {

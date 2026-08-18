@@ -1,6 +1,6 @@
 {
   "name": "@colbymchenry/cmem",
-  "version": "0.5.4-fork.4",
+  "version": "0.5.4-fork.5",
   "description": "Self-learning memory for Claude Code. Fork with vec0 knn query fix.",
   "main": "dist/cli.js",
   "type": "module",

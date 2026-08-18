@@ -5266,11 +5266,22 @@ ${content}`;
    * Check for duplicates and store if unique
    */
   async dedupeAndStore(raw, session, projectPath) {
-    const embeddingText = `${raw.title} ${raw.triggerContext} ${raw.insight}`;
+    // fork.5 (2026-08-18): ZROWNANIE Z HOOKIEM. Ten bundle zostal przy dedupie z przed fork.3:
+    //     embedowal surowe "title trigger insight" (format asymetryczny wobec bazy, ktora trzyma
+    //     tekst z etykietami) i decydowal leksykalnym isTooSimilar() (pokrycie slow > 0.85).
+    //     Skutek: `cmem synthesize` z CLI zachowywal sie INACZEJ niz automatyczna sciezka po Stop.
+    //     Teraz oba wejscia uzywaja tej samej metryki i tego samego progu — uzasadnienie liczbowe
+    //     przy analogicznym miejscu w dist/hooks/synthesize.js.
+    const embeddingText = [
+      `Title: ${raw.title}`,
+      `Category: ${raw.category}`,
+      `When to apply: ${raw.triggerContext}`,
+      `Insight: ${raw.insight}`
+    ].concat(raw.reasoning ? [`Reasoning: ${raw.reasoning}`] : []).join("\n\n");
     try {
       const embedding = await getEmbedding(embeddingText);
-      const similar = searchLessonsByEmbedding(embedding, projectPath, 1);
-      if (similar.length > 0 && this.isTooSimilar(similar[0], raw)) {
+      const similar = searchLessonsByEmbeddingWithDistance(embedding, projectPath, 1);
+      if (similar.length > 0 && similar[0].distance < 0.35) {
         return null;
       }
       const input = {
