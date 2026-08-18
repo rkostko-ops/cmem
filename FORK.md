@@ -92,6 +92,44 @@ every `Stop` — did not.
 ~1,481 tokens to 3 lessons / ~547 tokens, and an off-topic prompt from 8 lessons / ~1,552 tokens to
 1 lesson / ~160 tokens.
 
+### fork.4 — stop presenting lessons as established fact; decircularise the core slot
+
+**Not released yet:** no tag and no Release tarball exist for fork.4. The `Install` section above
+still points at fork.3, so a fresh `npm i -g` from that URL will silently revert these changes.
+Only `hooks/consult.js` is patched — `getCoreLessons()` is duplicated in four bundles (`cli.js`,
+`mcp/server.js`, `hooks/consult.js`, `hooks/synthesize.js`), and the injection path is the only one
+where the self-reinforcing ranking does damage; the others merely order listings.
+
+**1. The injected block no longer asserts truth.**
+`formatForInjection()` opened with *"The following is established knowledge about this project."*
+Lessons are LLM-synthesized claims that nothing verifies, and on the measured install two false
+lessons about cmem itself were being injected under that heading — one contradicting the code, one
+contradicting the hook configuration. The header now reads *"Claims from earlier sessions — may be
+stale or wrong; verify before relying on them."* (one line, no extra tokens).
+
+**2. `_(High confidence …)_` no longer contradicts its own number.**
+The footer printed `_(High confidence - validated ${timesValidated} times)_` whenever
+`confidence >= 0.8`. Since `times_validated` is ~0 corpus-wide (25 validations against 12,629
+injections), the block could literally claim *"High confidence – validated 0 times"* — asserting
+authority from a counter that says the opposite. It now prints `_(Validated N times)_` only when
+`times_validated > 0`, so the label appears solely where a human actually confirmed something.
+
+**3. Core-slot tiebreaker: `times_applied DESC` → `created_at DESC`.**
+`times_applied` is incremented by injection, not by usefulness, so ranking on it is self-confirming:
+2,276 of 3,309 active lessons have 0, while 84 lessons with 50+ would hold the core slot forever.
+Ordering is now `times_validated DESC, confidence DESC, created_at DESC` — recency is at least
+non-circular. Note the fork.3 note above overstated this: `times_applied` was already the *third*
+key behind a `confidence >= 0.7` gate, so with `maxCore = 1` the blast radius is one slot.
+
+*Verified end-to-end* against a WAL-consistent snapshot of the real database with `HOME` redirected
+(`CMEM_DIR` is hardcoded to `$HOME/.cmem` — there is no env override): an on-topic prompt returned
+4 lessons, an off-topic prompt 1 (core only), and the live database was left untouched.
+
+*Corpus note:* the fork.3 figure of "17 active lessons across 9 project paths" holds up when counted
+by lessons whose **title** carries the fact. A wider `title OR insight LIKE` count returns 44, but 27
+of those merely mention the fact while covering something else — do not read that as redundancy. The
+genuine within-project surplus was 5 pairs, archived after reading each pair in full.
+
 ## Working on this fork
 
 Because there are no sources, edits go straight into `dist/*.js` in this repository — then commit,
