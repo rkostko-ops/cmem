@@ -33,7 +33,7 @@ npx @colbymchenry/cmem
 > deduplication. **The `npx` command below is upstream's and does not install this fork.** Install with:
 >
 > ```bash
-> npm i -g https://github.com/rkostko-ops/cmem/releases/download/v0.5.4-fork.4/colbymchenry-cmem-0.5.4-fork.4.tgz
+> npm i -g https://github.com/rkostko-ops/cmem/releases/download/v0.5.4-fork.5/colbymchenry-cmem-0.5.4-fork.5.tgz
 > ```
 >
 > See **[FORK.md](FORK.md)** for what changed, why, and the measurements behind each threshold.

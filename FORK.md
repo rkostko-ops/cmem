@@ -13,7 +13,7 @@ file for the two places where it describes intent rather than the shipped code.
 ## Install
 
 ```bash
-npm i -g https://github.com/rkostko-ops/cmem/releases/download/v0.5.4-fork.4/colbymchenry-cmem-0.5.4-fork.4.tgz
+npm i -g https://github.com/rkostko-ops/cmem/releases/download/v0.5.4-fork.5/colbymchenry-cmem-0.5.4-fork.5.tgz
 ```
 
 **The package name must stay scoped (`@colbymchenry/cmem`).** Claude Code hooks reference
@@ -127,6 +127,44 @@ key behind a `confidence >= 0.7` gate, so with `maxCore = 1` the blast radius is
 by lessons whose **title** carries the fact. A wider `title OR insight LIKE` count returns 44, but 27
 of those merely mention the fact while covering something else — do not read that as redundancy. The
 genuine within-project surplus was 5 pairs, archived after reading each pair in full.
+
+### fork.5 — recalibrated dedup threshold (0.48 → 0.35) and aligned CLI bundle
+
+**1. Threshold `0.48` → `0.35` (`hooks/synthesize.js`).** The fork.3 figure was calibrated on twelve
+hand-read pairs drawn from the decision band — too small and too biased a sample. Measured over the
+full distribution instead (distance to the nearest *other* lesson, three project pools, ~1,600
+lessons), `0.48` would reject **65–88% of genuinely distinct lessons** had they arrived as new. From
+about `0.38` upwards the matches come from **rhetorical form** rather than content: two unrelated
+pieces of advice that merely open with the same phrase sit at `0.403`. Below `0.35` every borderline
+pair inspected was a real duplicate.
+
+| threshold | share of existing, distinct lessons that would be rejected as duplicates |
+|---|---|
+| 0.32 | 0–8% |
+| **0.35** | 4–19% |
+| 0.40 | 28–38% |
+| 0.48 | 65–88% |
+
+Under-merge is the safe failure mode here: a duplicated lesson costs one injection slot, a wrongly
+rejected one costs the knowledge for good — and it costs exactly the class of knowledge that reading
+the code cannot recover (decisions, rationale, "what we deliberately did not build").
+
+**2. The CLI bundle was still running the pre-fork.3 dedup (`cli.js`).** fork.3 patched only the hook.
+`cli.js` embedded a raw `title trigger insight` concatenation — asymmetric against the labelled text
+the database stores — and decided with the lexical `isTooSimilar()` (word overlap > 0.85). So
+`cmem synthesize` from the CLI behaved differently from the automatic path after `Stop`. Both entry
+points now build the same labelled embedding text and apply the same threshold.
+
+**3. Correction to the fork.3 note above: semantic dedup does NOT catch cross-language paraphrases.**
+That claim was wrong. Measured: a paraphrase of the same fact in the other language sits **0.575**
+from its original and falls outside the ten nearest neighbours, while the same paraphrase in the
+original language sits at **0.327** (neighbour #1). The embedding model clusters by language before
+content. **No threshold fixes this — do not tune for it.** Cross-language duplicates are caught only
+when shared literals (identifiers, hostnames, file names) dominate the text.
+
+**Also worth knowing:** `dedupeAndStore()` has a `catch` that stores the lesson **without** dedup when
+`getEmbedding()` throws. That is deliberate fail-open behaviour for a memory system — losing the dedup
+is cheaper than losing the lesson — but it means an embedding outage silently disables deduplication.
 
 ## Working on this fork
 
