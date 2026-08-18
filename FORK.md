@@ -13,7 +13,7 @@ file for the two places where it describes intent rather than the shipped code.
 ## Install
 
 ```bash
-npm i -g https://github.com/rkostko-ops/cmem/releases/download/v0.5.4-fork.3/colbymchenry-cmem-0.5.4-fork.3.tgz
+npm i -g https://github.com/rkostko-ops/cmem/releases/download/v0.5.4-fork.4/colbymchenry-cmem-0.5.4-fork.4.tgz
 ```
 
 **The package name must stay scoped (`@colbymchenry/cmem`).** Claude Code hooks reference
@@ -94,8 +94,6 @@ every `Stop` — did not.
 
 ### fork.4 — stop presenting lessons as established fact; decircularise the core slot
 
-**Not released yet:** no tag and no Release tarball exist for fork.4. The `Install` section above
-still points at fork.3, so a fresh `npm i -g` from that URL will silently revert these changes.
 Only `hooks/consult.js` is patched — `getCoreLessons()` is duplicated in four bundles (`cli.js`,
 `mcp/server.js`, `hooks/consult.js`, `hooks/synthesize.js`), and the injection path is the only one
 where the self-reinforcing ranking does damage; the others merely order listings.
