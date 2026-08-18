@@ -488,6 +488,10 @@ function getLessonsByProject(projectPath, options = {}) {
 }
 function getCoreLessons(projectPath, limit = 3) {
   const db2 = getDatabase();
+  // fork.4 (2026-08-18): tiebreaker `created_at DESC` zamiast `times_applied DESC`.
+  // times_applied rosnie od samego WSTRZYKNIECIA, nie od pozytku, wiec sortowanie po nim
+  // domykalo petle samopotwierdzajaca: zmierzone 2276 z 3309 aktywnych lekcji ma 0,
+  // a 84 lekcje z 50+ okupowalyby slot core na zawsze. Swiezosc jest niecyrkularna.
   const rows = db2.prepare(`
     SELECT * FROM lessons
     WHERE project_path = ?
@@ -496,7 +500,7 @@ function getCoreLessons(projectPath, limit = 3) {
     ORDER BY
       times_validated DESC,
       confidence DESC,
-      times_applied DESC
+      created_at DESC
     LIMIT ?
   `).all(projectPath, limit);
   return rows.map(mapLessonRow);
@@ -908,7 +912,7 @@ var LessonConsultant = class {
     }
     const lines = [
       "<project_knowledge>",
-      "The following is established knowledge about this project.",
+      "Claims from earlier sessions - may be stale or wrong; verify before relying on them.",
       ""
     ];
     const byCategory = this.groupByCategory(lessons);
@@ -923,8 +927,8 @@ var LessonConsultant = class {
         if (lesson.reasoning) {
           lines.push(`_Reason: ${lesson.reasoning}_`);
         }
-        if (lesson.confidence >= 0.8) {
-          lines.push(`_(High confidence - validated ${lesson.timesValidated} times)_`);
+        if (lesson.timesValidated > 0) {
+          lines.push(`_(Validated ${lesson.timesValidated} times)_`);
         }
         lines.push("");
       }
