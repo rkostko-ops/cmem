@@ -996,7 +996,12 @@ async function main() {
         // (getCoreLessons sortuje po times_validated, ktore jest ~0, wiec de facto po times_applied,
         // a ten licznik rosnie od samego wstrzykniecia => petla samopotwierdzajaca).
         maxSemantic: 3,
-        maxCore: 1
+        // fork.6 (2026-09-23): maxCore 1 -> 0. Slot core byl ZAMROZONY (sort po times_validated,
+        // ktore ma wartosc >0 u garstki lekcji): ta sama lekcja wchodzila w 89,3% polecen, czyli
+        // ~26% budzetu. Slepa ocena 39 wstrzyknietych lekcji core: 8% TRAFNYCH, wobec 7% dla
+        // lekcji LOSOWEJ z tego samego projektu - slot byl statystycznie nieodroznialny od losu.
+        // Bilans na 43 poleceniach: precyzja 36,7% -> 45,0% przy NIEZMIENIONYM pokryciu 76,7%.
+        maxCore: 0
       },
       input.session_id
       // Session ID for deduplication - don't re-inject same lessons

@@ -312,6 +312,7 @@ function mapSessionRow(row) {
 }
 
 // src/db/lessons.ts
+import { appendFileSync } from "fs";
 import { randomUUID } from "crypto";
 function mapLessonRow(row) {
   return {
@@ -545,6 +546,146 @@ function storeLessonEmbedding(lessonId, embedding) {
     VALUES (?, ?)
   `).run(lessonId, JSON.stringify(embedding));
 }
+// === fork.7 (2026-09-23): SUPERSEDE-AT-WRITE ==================================
+// Problem: korpus gromadzil sprzeczne WERSJE tej samej decyzji, bo dedup semantyczny
+// (prog 0.35) lapi tylko blizniaki tekstowe. Zmierzone w profbud: 98 aktywnych lekcji
+// o glosowaniu, w tym "Voting dedup: count-time, not write-time" ORAZ "Voting dedup:
+// append-only + offline policy beats write-time" — obie z 2026-07-08, obie aktywne,
+// a decyzja zostala pozniej odwrocona na blokade po IP przy zapisie. Slepa ocena
+// pokazala, ze takie lekcje trafiaja do wynikow jako MYLACE (kanal leksykalny: 3%).
+// Mechanizm dziala PRZY ZAPISIE i w tle (synteza jest detached), wiec NIE dotyka
+// latencji sciezki promptu uzytkownika.
+// Tryb: CMEM_SUPERSEDE = shadow (domyslnie: tylko oznacza) | enforce (archiwizuje) | off.
+var SUPERSEDE_MODE = (process.env.CMEM_SUPERSEDE || "shadow").toLowerCase();
+var SUPERSEDE_MIN = 0.35;
+var SUPERSEDE_MAX = 0.6;
+var SUPERSEDE_MAX_CANDIDATES = 5;
+var SUPERSEDE_MAX_ARCHIVED = 2;
+var SUPERSEDE_LOG = join(CMEM_DIR, "supersede.log");
+var supersedeColumnsReady = false;
+function ensureSupersedeColumns() {
+  if (supersedeColumnsReady) return;
+  const db2 = getDatabase();
+  const cols = new Set(db2.prepare("PRAGMA table_info(lessons)").all().map((c) => c.name));
+  for (const [name, type] of [["superseded_by", "TEXT"], ["superseded_at", "TEXT"], ["superseded_reason", "TEXT"]]) {
+    if (!cols.has(name)) db2.exec(`ALTER TABLE lessons ADD COLUMN ${name} ${type}`);
+  }
+  supersedeColumnsReady = true;
+}
+function supersedeLog(entry) {
+  try {
+    appendFileSync(SUPERSEDE_LOG, JSON.stringify({ ts: (/* @__PURE__ */ new Date()).toISOString(), ...entry }) + "\n");
+  } catch {
+  }
+}
+// Kandydaci: STARSI od nowej lekcji, ten sam projekt, dystans w pasmie decyzyjnym.
+// Ponizej SUPERSEDE_MIN sprawa nalezy do dedupu, powyzej SUPERSEDE_MAX to inny temat.
+function supersedeCandidates(embedding, projectPath, createdAt) {
+  const db2 = getDatabase();
+  const rows = db2.prepare(`
+    SELECT l.id, l.title, l.trigger_context, l.insight, l.created_at,
+           vec_distance_L2(le.embedding, ?) AS distance
+    FROM lesson_embeddings le JOIN lessons l ON l.id = le.lesson_id
+    WHERE l.project_path = ? AND l.archived = 0 AND l.created_at < ?
+    ORDER BY distance ASC LIMIT 30
+  `).all(JSON.stringify(embedding), projectPath, createdAt);
+  return rows.filter((r) => r.distance >= SUPERSEDE_MIN && r.distance < SUPERSEDE_MAX).slice(0, SUPERSEDE_MAX_CANDIDATES);
+}
+function buildSupersedePrompt(raw, candidates) {
+  const list = candidates.map((c, i) => [
+    `### KANDYDAT ${i + 1} (id: ${c.id})`,
+    `Tytul: ${c.title}`,
+    `Kiedy stosowac: ${c.trigger_context}`,
+    `Tresc: ${String(c.insight).slice(0, 700)}`
+  ].join("\n")).join("\n\n");
+  return `Oceniasz, czy NOWA lekcja UNIEWAZNIA ktoras ze STARSZYCH lekcji o tym samym projekcie.
+
+## NOWA LEKCJA
+Tytul: ${raw.title}
+Kiedy stosowac: ${raw.triggerContext}
+Tresc: ${String(raw.insight).slice(0, 900)}
+
+## STARSZE LEKCJE
+${list}
+
+## Zadanie
+Dla KAZDEGO kandydata rozstrzygnij, czy nowa lekcja czyni go NIEPRAWDZIWYM lub NIEAKTUALNYM.
+
+SUPERSEDED — tylko gdy nowa lekcja opisuje TEN SAM przedmiot i stwierdza cos PRZECIWNEGO albo
+jawnie odwraca wczesniejsza decyzje. Stosowanie sie do starej lekcji dalaby dzis ZLY wynik.
+Przyklad: stara mowi "dedup glosow przy liczeniu, nie przy zapisie", nowa "blokujemy przy zapisie po IP".
+
+KEEP — wszystkie pozostale przypadki: lekcja uzupelniajaca, o innym aspekcie, bardziej szczegolowa,
+o innym module, albo po prostu podobna tematycznie. Rowniez gdy masz watpliwosc.
+
+TEST CALOSCI (najwazniejszy): lekcje sa WIELOFAKTOWE — jedna lekcja czesto zawiera kilka
+niezaleznych ustalen. SUPERSEDED wolno wybrac TYLKO wtedy, gdy nieaktualna staje sie CALA tresc
+kandydata. Jesli choc JEDEN fakt z kandydata pozostaje w mocy — odpowiedz KEEP, nawet jesli inny
+fakt z tej samej lekcji zostal odwrocony. Przyklad bledu, ktorego masz nie popelnic: kandydat
+wymienia cookie 12h, reCAPTCHA, zrodlo danych ORAZ sposob liczenia; nowa lekcja zmienia wylacznie
+sposob liczenia — to jest KEEP, bo trzy pozostale fakty nadal obowiazuja.
+
+WAZNE: KEEP jest domyslna odpowiedzia. Archiwizacja jest nieodwracalna w praktyce, bo nikt nie
+zaglada do archiwum — a lekcja uzupelniajaca omylkowo uznana za uniewazniona to utrata wiedzy.
+Nie szukaj sprzecznosci na sile. Zestaw, w ktorym wszystko jest KEEP, jest normalnym wynikiem.
+
+## Format odpowiedzi
+Zwroc wylacznie tablice JSON, bez zadnego innego tekstu:
+[{"id":"<id kandydata>","verdict":"SUPERSEDED|KEEP","reason":"<jedno zdanie, max 160 znakow>"}]`;
+}
+function parseSupersedeResponse(text) {
+  if (!text) return [];
+  const m = text.match(/\[[\s\S]*\]/);
+  if (!m) return [];
+  try {
+    const arr = JSON.parse(m[0]);
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+}
+// Zwraca liczbe lekcji oznaczonych jako uniewaznione (w trybie shadow tylko oznaczonych).
+async function applySupersede(lesson, raw, embedding, projectPath) {
+  if (SUPERSEDE_MODE === "off") return 0;
+  try {
+    ensureSupersedeColumns();
+    const candidates = supersedeCandidates(embedding, projectPath, lesson.createdAt || (/* @__PURE__ */ new Date()).toISOString());
+    if (candidates.length === 0) return 0;
+    const response = await runClaudePrompt(buildSupersedePrompt(raw, candidates), { model: "haiku", maxTokens: 800 });
+    if (!response.success) {
+      supersedeLog({ event: "llm_failed", newId: lesson.id, error: String(response.error).slice(0, 200) });
+      return 0;
+    }
+    const verdicts = parseSupersedeResponse(response.content);
+    const valid = new Set(candidates.map((c) => c.id));
+    const hits = verdicts.filter((v) => v && v.verdict === "SUPERSEDED" && valid.has(v.id)).slice(0, SUPERSEDE_MAX_ARCHIVED);
+    if (hits.length === 0) {
+      supersedeLog({ event: "no_supersede", newId: lesson.id, newTitle: lesson.title, candidates: candidates.length });
+      return 0;
+    }
+    const db2 = getDatabase();
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    const enforce = SUPERSEDE_MODE === "enforce";
+    const stmt = enforce ? db2.prepare("UPDATE lessons SET superseded_by = ?, superseded_at = ?, superseded_reason = ?, archived = 1, updated_at = ? WHERE id = ?") : db2.prepare("UPDATE lessons SET superseded_by = ?, superseded_at = ?, superseded_reason = ?, updated_at = ? WHERE id = ?");
+    for (const h of hits) {
+      const reason = String(h.reason || "").slice(0, 300);
+      stmt.run(lesson.id, now, reason, now, h.id);
+      const cand = candidates.find((c) => c.id === h.id);
+      supersedeLog({
+        event: enforce ? "archived" : "marked_shadow",
+        newId: lesson.id, newTitle: lesson.title,
+        oldId: h.id, oldTitle: cand ? cand.title : null,
+        distance: cand ? Number(cand.distance.toFixed(4)) : null,
+        reason
+      });
+    }
+    return hits.length;
+  } catch (error) {
+    supersedeLog({ event: "error", newId: lesson && lesson.id, error: String(error).slice(0, 200) });
+    return 0;
+  }
+}
+// === koniec bloku fork.7 =====================================================
 function searchLessonsByEmbedding(embedding, projectPath, limit = 5) {
   return searchLessonsByEmbeddingWithDistance(embedding, projectPath, limit).map((r) => r.lesson);
 }
@@ -1237,6 +1378,7 @@ ${content}`;
         sourceType: "synthesized"
       };
       const lesson = await lessonManager.create(input);
+      await applySupersede(lesson, raw, embedding, projectPath);
       return lesson;
     } catch {
       const input = {
