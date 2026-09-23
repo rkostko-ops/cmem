@@ -13,7 +13,7 @@ file for the two places where it describes intent rather than the shipped code.
 ## Install
 
 ```bash
-npm i -g https://github.com/rkostko-ops/cmem/releases/download/v0.5.4-fork.5/colbymchenry-cmem-0.5.4-fork.5.tgz
+npm i -g https://github.com/rkostko-ops/cmem/releases/download/v0.5.4-fork.7/colbymchenry-cmem-0.5.4-fork.7.tgz
 ```
 
 **The package name must stay scoped (`@colbymchenry/cmem`).** Claude Code hooks reference
@@ -188,6 +188,74 @@ Two traps worth knowing:
 
 Release flow: edit `dist/` → commit → `npm pack` → tag `v<version>` → GitHub Release with the tarball
 as an asset (the install command above points at that asset).
+
+### fork.6 — the "core" slot was frozen on a single lesson, and it was not relevant
+
+`getCoreLessons` orders by `times_validated`, a counter that is greater than zero for only a handful
+of lessons in any real corpus. The result is not a ranking but a **permanent winner**: the same lesson
+was injected into **435 of 487 real prompts (89.3%)**, taking roughly **26% of the injection budget**
+regardless of what was asked.
+
+Blind relevance rating (Opus, raters given no position or distance information, 45 real prompts):
+
+| candidate source | rated RELEVANT |
+|---|---|
+| core slot (39 injections) | **8%** |
+| a lesson picked **at random** from the same project | **7%** |
+| top-1 semantic neighbour | 56% |
+
+The core slot was statistically indistinguishable from random selection, so `maxCore` goes `1 → 0`
+in `hooks/consult.js`. Measured over 43 prompts, dropping it **dominates** the previous behaviour:
+
+| variant | slots/prompt | precision | coverage |
+|---|---|---|---|
+| core + 3 semantic | 3.86 | 36.7% | 76.7% |
+| **3 semantic only** | **3.00** | **45.0%** | **76.7%** |
+
+Fewer tokens, higher precision, coverage unchanged.
+
+> **Caveat on the absolute numbers.** The replay queries *today's* corpus with *historical* prompts,
+> so 28.8% of the rated lessons did not yet exist when the prompt was issued — and those score 57.1%
+> versus 20.2% for genuinely available ones. Restricted to lessons that existed at prompt time,
+> top-1 relevance is **25%**, not 51%, and overall precision is nearer **30% than 44%**. The
+> *comparisons* above hold (every variant was scored against the same corpus, so the leak applies
+> uniformly); the absolute figures are optimistic.
+
+### fork.7 — mark lessons that a newer one supersedes (shadow mode by default)
+
+Semantic dedup (`0.35`) catches **textual twins**, never **contradictions**, so the corpus quietly
+accumulates successive *versions* of the same decision, all of them active. Measured on a real
+corpus: one project had 98 active lessons about a single module, two of them written on the same day
+describing **opposite** variants of the same decision — both still active long after the choice had
+been reversed. Blind rating confirmed such lessons reach the output labelled **MISLEADING**, which is
+the most expensive failure mode: the model acts on a false premise and nothing signals it.
+
+The check runs **at write time and in the background** (synthesis is already a detached process), so
+it adds nothing to the latency of the user's prompt path. After a lesson is stored, up to five
+**older** neighbours from the `0.35–0.60` band are sent to a single `haiku` call asking whether the
+new lesson **invalidates** any of them. Verdicts land in new columns `superseded_by`, `superseded_at`
+and `superseded_reason` (added idempotently via `ensureSupersedeColumns`).
+
+Mode is set by `CMEM_SUPERSEDE`: **`shadow`** (default — records the verdict, changes nothing),
+`enforce` (also sets `archived = 1`), `off`. It ships in shadow mode deliberately: the mechanism's
+accuracy on a given corpus is unknown, and a wrong archival costs knowledge permanently.
+
+**Prompt calibration matters more than the threshold.** The first version wrongly marked a lesson
+listing four independent facts as superseded, because the new lesson changed exactly one of them —
+it would have discarded three still-valid facts. Lessons are **multi-fact**, so the prompt now carries
+a *wholeness test*: answer SUPERSEDED only when the candidate's **entire** content is obsolete; if a
+single fact still holds, answer KEEP. After the fix the multi-fact case scored 5/5 KEEP and a
+genuinely reversed single-fact lesson was correctly marked.
+
+Safeguards: at most 2 marks per new lesson, verdicts accepted only for ids from the candidate list,
+fail-open on both model errors and unparseable JSON, and a JSONL audit trail at `~/.cmem/supersede.log`.
+Verified against a database copy: shadow does not archive · the 2-mark cap holds · garbage from the
+model changes nothing · a model error changes nothing · foreign ids are rejected · `enforce` archives
+· `off` is inert.
+
+Both bundles were patched. `cli.js` and `hooks/synthesize.js` carry **separate copies** of
+`dedupeAndStore` — the same divergence fork.3 had to repair — and the inserted blocks were verified
+byte-identical. The manual `save_lesson` path is deliberately untouched.
 
 ## Corrections to `opis_dzialania_narzedzia.md`
 
