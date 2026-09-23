@@ -3348,11 +3348,11 @@ function storeLessonEmbedding(lessonId, embedding) {
 }
 // === fork.7 (2026-09-23): SUPERSEDE-AT-WRITE ==================================
 // Problem: korpus gromadzil sprzeczne WERSJE tej samej decyzji, bo dedup semantyczny
-// (prog 0.35) lapi tylko blizniaki tekstowe. Zmierzone w profbud: 98 aktywnych lekcji
-// o glosowaniu, w tym "Voting dedup: count-time, not write-time" ORAZ "Voting dedup:
-// append-only + offline policy beats write-time" — obie z 2026-07-08, obie aktywne,
-// a decyzja zostala pozniej odwrocona na blokade po IP przy zapisie. Slepa ocena
-// pokazala, ze takie lekcje trafiaja do wynikow jako MYLACE (kanal leksykalny: 3%).
+// (prog 0.35) lapi tylko blizniaki tekstowe. Zmierzone na realnym korpusie: w jednym
+// projekcie 98 aktywnych lekcji dotyczylo tego samego modulu, a wsrod nich dwie z tego
+// samego dnia opisywaly PRZECIWNE warianty tej samej decyzji — obie nadal aktywne, choc
+// wybor zostal pozniej odwrocony. Slepa ocena pokazala, ze takie lekcje trafiaja
+// do wynikow jako MYLACE (kanal leksykalny: 3% slotow).
 // Mechanizm dziala PRZY ZAPISIE i w tle (synteza jest detached), wiec NIE dotyka
 // latencji sciezki promptu uzytkownika.
 // Tryb: CMEM_SUPERSEDE = shadow (domyslnie: tylko oznacza) | enforce (archiwizuje) | off.
@@ -3422,8 +3422,9 @@ TEST CALOSCI (najwazniejszy): lekcje sa WIELOFAKTOWE — jedna lekcja czesto zaw
 niezaleznych ustalen. SUPERSEDED wolno wybrac TYLKO wtedy, gdy nieaktualna staje sie CALA tresc
 kandydata. Jesli choc JEDEN fakt z kandydata pozostaje w mocy — odpowiedz KEEP, nawet jesli inny
 fakt z tej samej lekcji zostal odwrocony. Przyklad bledu, ktorego masz nie popelnic: kandydat
-wymienia cookie 12h, reCAPTCHA, zrodlo danych ORAZ sposob liczenia; nowa lekcja zmienia wylacznie
-sposob liczenia — to jest KEEP, bo trzy pozostale fakty nadal obowiazuja.
+wymienia cztery niezalezne ustalenia — mechanizm dzialania, zabezpieczenie, zrodlo danych ORAZ
+sposob liczenia; nowa lekcja zmienia wylacznie sposob liczenia, wiec to jest KEEP, bo trzy
+pozostale fakty nadal obowiazuja.
 
 WAZNE: KEEP jest domyslna odpowiedzia. Archiwizacja jest nieodwracalna w praktyce, bo nikt nie
 zaglada do archiwum — a lekcja uzupelniajaca omylkowo uznana za uniewazniona to utrata wiedzy.
