@@ -3103,9 +3103,9 @@ async function runClaudePrompt(prompt, options = {}) {
       resolve({
         success: false,
         content: textChunks.join(""),
-        error: "Request timed out after 60 seconds"
+        error: "Request timed out after 180 seconds"
       });
-    }, 6e4);
+    }, 18e4); // fork.8: 60 s ucinalo realne syntezy (60-88 s z pelnym startem CLI)
   });
 }
 function isClaudeCliAvailable() {
@@ -5301,6 +5301,14 @@ var SynthesisEngine = class {
    */
   buildSynthesisPrompt(session, messages) {
     const formattedMessages = this.formatMessages(messages);
+    const priorTitles = this.priorSessionLessonTitles(session.id);
+    const priorSection = priorTitles.length === 0 ? "" : `
+## Lessons ALREADY extracted from this session
+${priorTitles.map((t) => `- ${t}`).join("\n")}
+
+- Do NOT return a lesson that repeats, rephrases or TRANSLATES any of the above (in ANY language) — they are already stored.
+- Exception: if the conversation later REVERSED or corrected one of them, DO return the new, corrected lesson.
+`;
     return `You are analyzing a Claude Code conversation session to extract reusable lessons.
 
 ## Session Information
@@ -5332,7 +5340,7 @@ Extract reusable lessons from this conversation. Focus on:
 - Prefer ONE excellent, durable lesson over several mediocre ones. An almost-empty
   array is the correct answer for a routine session — most sessions teach nothing reusable.
 - Do NOT restate facts that are obvious from the codebase, nor generic engineering advice.
-
+${priorSection}
 ## Output Format
 Return a JSON array of lessons. Each lesson must have:
 \`\`\`json
@@ -5356,6 +5364,20 @@ Confidence guidelines:
 Return an empty array [] if no reusable lessons can be extracted.
 
 Output only the JSON array, no other text.`;
+  }
+  // fork.8 (2026-09-26): synteza odpala sie wielokrotnie dla tej samej, rosnacej sesji
+  //     (throttle co 15 min) i za kazdym razem widzi nakladajace sie okno rozmowy. Bez wiedzy,
+  //     co juz zapisano, model wyciagal te same lekcje ponownie, na zmiane PL/EN — zmierzone
+  //     24-52% powtorek w najciezszych sesjach. Dedup embeddingowy nie lapie bliźniakow
+  //     miedzyjezykowych (0.575 > 0.35), a supersede ich nie widzi, wiec odwrocona decyzja
+  //     przezywala w drugim jezyku. Dlatego lista tytulow idzie do promptu (fail-open).
+  priorSessionLessonTitles(sessionId) {
+    if (!sessionId) return [];
+    try {
+      return getDatabase().prepare("SELECT title FROM lessons WHERE source_session_id = ? ORDER BY created_at DESC LIMIT 40").all(sessionId).map((r) => r.title);
+    } catch {
+      return [];
+    }
   }
   /**
    * Format messages for the prompt
