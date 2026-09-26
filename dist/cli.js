@@ -3020,6 +3020,11 @@ async function runClaudePrompt(prompt, options = {}) {
     "--permission-mode",
     "plan"
     // Read-only, no tools needed for summarization
+    ,"--strict-mcp-config",
+    "--mcp-config",
+    "{\"mcpServers\":{}}"
+    // fork.8: bez serwerow MCP — synteza nie uzywa narzedzi, a start ze wszystkimi
+    // serwerami trwal 10-21 s zamiast ~6 s (zmierzone 2026-09-26)
   ];
   return new Promise((resolve) => {
     const childProcess = spawn(claudePath, args, {
