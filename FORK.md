@@ -13,7 +13,7 @@ file for the two places where it describes intent rather than the shipped code.
 ## Install
 
 ```bash
-npm i -g https://github.com/rkostko-ops/cmem/releases/download/v0.5.4-fork.7/colbymchenry-cmem-0.5.4-fork.7.tgz
+npm i -g https://github.com/rkostko-ops/cmem/releases/download/v0.5.4-fork.8/colbymchenry-cmem-0.5.4-fork.8.tgz
 ```
 
 **The package name must stay scoped (`@colbymchenry/cmem`).** Claude Code hooks reference
@@ -256,6 +256,34 @@ model changes nothing · a model error changes nothing · foreign ids are reject
 Both bundles were patched. `cli.js` and `hooks/synthesize.js` carry **separate copies** of
 `dedupeAndStore` — the same divergence fork.3 had to repair — and the inserted blocks were verified
 byte-identical. The manual `save_lesson` path is deliberately untouched.
+
+### fork.8 — stop re-extracting the same lessons; faster, uncut synthesis
+
+**Re-extraction.** Synthesis runs repeatedly for the same growing session (at most every 15 minutes
+with a sync throttle) and each run sees an overlapping window of the conversation. Nothing told the
+model what had already been stored, so it extracted the same lessons again, alternating between
+languages. Measured in the three heaviest sessions of one week: **24–52%** of their lessons were
+repeats of an earlier run of the same session. Embedding dedup cannot catch cross-language twins
+(`0.575` vs the `0.35` threshold), and neither can supersede — so a reversed decision **survived in
+the other language** as an active, unmarked lesson.
+
+`buildSynthesisPrompt` now lists the titles of lessons already stored for this session
+(`source_session_id`, newest 40, fail-open) and forbids repeating, rephrasing or translating them —
+while still asking for a lesson that *reverses or corrects* one of them, so supersede has something
+to compare. A/B on a real session with `haiku`: without the list **3/3** returned lessons were
+repeats; with the list, **2 new** ones.
+
+**Timeout 60 s → 180 s.** Real synthesis calls took 60–88 s, so the old limit silently cut them
+(it is also the cause of the `llm_failed` timeouts in `supersede.log`). Synthesis is detached from
+the hook, so the longer limit costs no user-facing latency.
+
+**No MCP servers in the spawned `claude -p`.** Synthesis and supersede use no tools, yet every call
+started all configured MCP servers: 10–21 s instead of ~6 s for a trivial prompt, and 83 s → 63 s
+for a full synthesis prompt. `runClaudePrompt` now passes `--strict-mcp-config --mcp-config
+'{"mcpServers":{}}'`. (`--bare` would be leaner but requires an API key and ignores subscription login.)
+
+All three changes are in both bundles (`hooks/synthesize.js` and `cli.js`); `mcp/server.js` keeps
+its own `runClaudePrompt` untouched, as it serves the interactive path.
 
 ## Corrections to `opis_dzialania_narzedzia.md`
 
