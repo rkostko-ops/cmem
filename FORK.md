@@ -13,7 +13,7 @@ file for the two places where it describes intent rather than the shipped code.
 ## Install
 
 ```bash
-npm i -g https://github.com/rkostko-ops/cmem/releases/download/v0.5.4-fork.8/colbymchenry-cmem-0.5.4-fork.8.tgz
+npm i -g https://github.com/rkostko-ops/cmem/releases/download/v0.5.4-fork.9/colbymchenry-cmem-0.5.4-fork.9.tgz
 ```
 
 **The package name must stay scoped (`@colbymchenry/cmem`).** Claude Code hooks reference
@@ -284,6 +284,30 @@ for a full synthesis prompt. `runClaudePrompt` now passes `--strict-mcp-config -
 
 All three changes are in both bundles (`hooks/synthesize.js` and `cli.js`); `mcp/server.js` keeps
 its own `runClaudePrompt` untouched, as it serves the interactive path.
+
+### fork.9 — `better-sqlite3` 11 → 13 (N-API): one binary for Node 22 and 24
+
+**No code change** — `dist/` is byte-identical to fork.8. Only the dependency declaration moved:
+`better-sqlite3` `^11.7.0` → `^13.0.3`, and `engines.node` `>=18` → `>=22` (13.x requires it).
+
+**Why.** `better-sqlite3` 11.x and 12.x are compiled against a single Node ABI. On Node 24 (ABI 137)
+fork.8 cannot load it — and the failure is **silent**: `consult.js` and the `Stop` hook `sync.js` exit 0
+with no effect (no lessons injected, no sessions saved, no synthesis queued), and the MCP server connects
+and answers `tools/list` while every tool call returns an error. 13.x is built on N-API, so a single
+prebuilt binary loads on Node 22 and 24 with no compilation step and no rebuild after a Node upgrade.
+
+**Verified** on a copy of a real database (2,806 sessions, ~21.7k lessons), comparing Node 22.18 +
+better-sqlite3 11.10.0 against 13.0.3 on Node 22 and on Node 24.22: `consult.js` output byte-identical;
+10 of the 11 MCP tools (including the writing ones); CLI `stats`, `search`, `purge`, `restore`,
+`delete`, `save`, `gui`, `watch`; the full `sync` → synthesis path with a stubbed `claude`. Processes
+on SQLite 3.49.2 (11.10.0) and 3.53.4 (13.0.3) read and wrote one WAL database alternately and
+`integrity_check` stayed `ok`, so rolling back to 11.x is safe. **Not covered:** `search_and_summarize`
+(spawns a real `claude`) and the interactive TUI commands (`cmem list`, `cmem setup`).
+
+**Upgrading.** `npm i -g` with the URL above resolves `better-sqlite3@^13`. If you patch an existing
+install by hand instead, replace `node_modules/better-sqlite3` with a rename (`mv`), never an in-place
+overwrite — running MCP servers keep the old native binary mapped. Note that reinstalling fork.8 or
+earlier brings back an ABI-bound 11.x.
 
 ## Corrections to `opis_dzialania_narzedzia.md`
 

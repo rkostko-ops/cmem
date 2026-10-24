@@ -33,7 +33,7 @@ npx @colbymchenry/cmem
 > deduplication. **The `npx` command below is upstream's and does not install this fork.** Install with:
 >
 > ```bash
-> npm i -g https://github.com/rkostko-ops/cmem/releases/download/v0.5.4-fork.8/colbymchenry-cmem-0.5.4-fork.8.tgz
+> npm i -g https://github.com/rkostko-ops/cmem/releases/download/v0.5.4-fork.9/colbymchenry-cmem-0.5.4-fork.9.tgz
 > ```
 >
 > See **[FORK.md](FORK.md)** for what changed, why, and the measurements behind each threshold.
@@ -174,7 +174,7 @@ The setup wizard will:
 
 ## Requirements
 
-- **Node.js 18+**
+- **Node.js 22+** (22 and 24 verified; `better-sqlite3` 13 requires it)
 - **Claude Code CLI** (for synthesis features)
 
 ## Usage
